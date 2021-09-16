@@ -19,6 +19,7 @@ async function main() {
         let event = core.getInput("event")
         let runID = core.getInput("run_id")
         let runNumber = core.getInput("run_number")
+        let checkArtifacts = core.getInput("check_artifacts")
 
         const client = github.getOctokit(token)
 
@@ -63,29 +64,44 @@ async function main() {
                 workflow_id: workflow,
                 branch: branch,
                 event: event,
-                status: workflowConclusion,
             }
             )) {
-                const run = runs.data.find(r => {
-                    if (commit) {
-                        return r.head_sha == commit
+                for (const run of runs.data) {
+                    if (commit && run.head_sha != commit) {
+                        continue
                     }
-                    if (runNumber) {
-                        return r.run_number == runNumber
+                    if (runNumber && run.run_number != runNumber) {
+                        continue
                     }
-                    return true
-                })
-
-                if (run) {
+                    if (workflowConclusion && (workflowConclusion != run.conclusion && workflowConclusion != run.status)) {
+                        continue
+                    }
+                    if (checkArtifacts) {
+                        let artifacts = await client.actions.listWorkflowRunArtifacts({
+                            owner: owner,
+                            repo: repo,
+                            run_id: run.id,
+                        })
+                        if (artifacts.data.artifacts.length == 0) {
+                            continue
+                        }
+                    }
                     runID = run.id
+                    break
+                }
+                if (runID) {
                     break
                 }
             }
         }
 
-        console.log("==> RunID:", runID)
+        if (runID) {
+            console.log("==> RunID:", runID)
+        } else {
+            throw new Error("no matching workflow run found")
+        }
 
-        let artifacts = await client.actions.listWorkflowRunArtifacts({
+        let artifacts = await client.paginate(client.actions.listWorkflowRunArtifacts, {
             owner: owner,
             repo: repo,
             run_id: runID,
@@ -93,11 +109,9 @@ async function main() {
 
         // One artifact or all if `name` input is not specified.
         if (name) {
-            artifacts = artifacts.data.artifacts.filter((artifact) => {
+            artifacts = artifacts.filter((artifact) => {
                 return artifact.name == name
             })
-        } else {
-            artifacts = artifacts.data.artifacts
         }
 
         if (artifacts.length == 0)
