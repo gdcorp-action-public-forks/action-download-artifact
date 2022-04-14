@@ -20,6 +20,7 @@ async function main() {
         let runID = core.getInput("run_id")
         let runNumber = core.getInput("run_number")
         let checkArtifacts = core.getInput("check_artifacts")
+        let searchArtifacts = core.getInput("search_artifacts")
 
         const client = github.getOctokit(token)
 
@@ -38,6 +39,7 @@ async function main() {
                 pull_number: pr,
             })
             commit = pull.data.head.sha
+            //branch = pull.data.head.ref
         }
 
         if (commit) {
@@ -62,8 +64,8 @@ async function main() {
                 owner: owner,
                 repo: repo,
                 workflow_id: workflow,
-                branch: branch,
-                event: event,
+                ...(branch ? { branch } : {}),
+                ...(event ? { event } : {}),
             }
             )) {
                 for (const run of runs.data) {
@@ -76,7 +78,7 @@ async function main() {
                     if (workflowConclusion && (workflowConclusion != run.conclusion && workflowConclusion != run.status)) {
                         continue
                     }
-                    if (checkArtifacts) {
+                    if (checkArtifacts || searchArtifacts) {
                         let artifacts = await client.actions.listWorkflowRunArtifacts({
                             owner: owner,
                             repo: repo,
@@ -84,6 +86,14 @@ async function main() {
                         })
                         if (artifacts.data.artifacts.length == 0) {
                             continue
+                        }
+                        if (searchArtifacts) {
+                            const artifact = artifacts.data.artifacts.find((artifact) => {
+                                return artifact.name == name
+                            })
+                            if (!artifact) {
+                                continue
+                            }
                         }
                     }
                     runID = run.id
@@ -147,8 +157,10 @@ async function main() {
             adm.extractAllTo(dir, true)
         }
     } catch (error) {
+        core.setOutput("error_message", error.message)
         core.setFailed(error.message)
     }
 }
 
 main()
+
