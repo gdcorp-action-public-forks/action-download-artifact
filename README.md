@@ -17,7 +17,7 @@ Let's suppose you have a workflow with a job in it that at the end uploads an ar
   with:
     # Optional, GitHub token, a Personal Access Token with `public_repo` scope if needed
     # Required, if the artifact is from a different repo
-    # Required, if the repo is private a Personal Access Token with `repo` scope is needed
+    # Required, if the repo is private a Personal Access Token with `repo` scope is needed or GitHub token in a job where the permissions `action` scope set to `read`
     github_token: ${{secrets.GITHUB_TOKEN}}
     # Optional, workflow file name or ID
     # If not specified, will be inferred from run_id (if run_id is specified), or will be the current workflow
@@ -38,6 +38,8 @@ Let's suppose you have a workflow with a job in it that at the end uploads an ar
     # Optional, defaults to all types
     event: push
     # Optional, will use specified workflow run
+    # use ${{ github.event.workflow_run.id }} when your action runs in a workflow_run event
+    # and wants to download from the triggering workflow run
     run_id: 1122334455
     # Optional, run number from the workflow
     run_number: 34
@@ -45,7 +47,12 @@ Let's suppose you have a workflow with a job in it that at the end uploads an ar
     # will download all artifacts if not specified
     # and extract them into respective subdirectories
     # https://github.com/actions/download-artifact#download-all-artifacts
+    # is treated as a regular expression if input name_is_regexp is true
+    # will download only those artifacts with a name that matches this regular expression
+    # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions
     name: artifact_name
+    # Optional, name is treated as a regular expression if set true
+    name_is_regexp: true
     # Optional, a directory where to extract artifact(s), defaults to the current directory
     path: extract_here
     # Optional, defaults to current repo
@@ -53,7 +60,7 @@ Let's suppose you have a workflow with a job in it that at the end uploads an ar
     # Optional, check the workflow run to whether it has an artifact
     # then will get the last available artifact from the previous workflow
     # default false, just try to download from the last one
-    check_artifacts:  false
+    check_artifacts: false
     # Optional, search for the last workflow run whose stored an artifact named as in `name` input
     # default false
     search_artifacts: false

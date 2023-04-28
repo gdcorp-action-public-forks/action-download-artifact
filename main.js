@@ -25,6 +25,7 @@ async function main() {
         const [owner, repo] = core.getInput("repo", { required: true }).split("/")
         const path = core.getInput("path", { required: true })
         const name = core.getInput("name")
+        const nameIsRegExp = core.getBooleanInput("name_is_regexp")
         const skipUnpack = core.getBooleanInput("skip_unpack")
         const ifNoArtifactFound = core.getInput("if_no_artifact_found")
         let workflow = core.getInput("workflow")
@@ -109,12 +110,10 @@ async function main() {
                 workflow_id: workflow,
                 ...(branch ? { branch } : {}),
                 ...(event ? { event } : {}),
+                ...(commit ? { head_sha: commit } : {}),
             }
             )) {
                 for (const run of runs.data) {
-                    if (commit && run.head_sha != commit) {
-                        continue
-                    }
                     if (runNumber && run.run_number != runNumber) {
                         continue
                     }
@@ -122,16 +121,19 @@ async function main() {
                         continue
                     }
                     if (checkArtifacts || searchArtifacts) {
-                        let artifacts = await client.rest.actions.listWorkflowRunArtifacts({
+                        let artifacts = await client.paginate(client.rest.actions.listWorkflowRunArtifacts, {
                             owner: owner,
                             repo: repo,
                             run_id: run.id,
                         })
-                        if (artifacts.data.artifacts.length == 0) {
+                        if (!artifacts || artifacts.length == 0) {
                             continue
                         }
                         if (searchArtifacts) {
-                            const artifact = artifacts.data.artifacts.find((artifact) => {
+                            const artifact = artifacts.find((artifact) => {
+                                if (nameIsRegExp) {
+                                    return artifact.name.match(name) !== null
+                                }
                                 return artifact.name == name
                             })
                             if (!artifact) {
@@ -168,9 +170,12 @@ async function main() {
             run_id: runID,
         })
 
-        // One artifact or all if `name` input is not specified.
+        // One artifact if 'name' input is specified, one or more if `name` is a regular expression, all otherwise.
         if (name) {
             filtered = artifacts.filter((artifact) => {
+                if (nameIsRegExp) {
+                    return artifact.name.match(name) !== null
+                }
                 return artifact.name == name
             })
             if (filtered.length == 0) {
@@ -240,7 +245,7 @@ async function main() {
                 continue
             }
 
-            const dir = name ? path : pathname.join(path, artifact.name)
+            const dir = name && !nameIsRegExp ? path : pathname.join(path, artifact.name)
 
             fs.mkdirSync(dir, { recursive: true })
 
